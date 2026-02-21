@@ -1,15 +1,39 @@
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
-import { format, disciplineColor, genderLabel } from "@/lib/utils";
+import { format, disciplineColor, genderLabel, wcPoints } from "@/lib/utils";
 import PredictionForm from "@/components/PredictionForm";
 import ResultsPodium from "@/components/ResultsPodium";
+import { fetchAthletePool } from "@/lib/fis/fetcher";
+import { syncRaceResults } from "@/lib/fis/sync";
 
 export default async function RacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const userId = user!.id;
+
+  // Auto-sync: if the race date has passed and we have no results yet, fetch from FIS.
+  // Only runs once per race — after syncing the race is marked "completed" and skipped.
+  const raceMeta = await prisma.race.findUnique({
+    where: { id },
+    select: { status: true, date: true, fisRaceIds: true },
+  });
+  if (
+    raceMeta &&
+    raceMeta.status === "upcoming" &&
+    raceMeta.date < new Date() &&
+    raceMeta.fisRaceIds.length > 0
+  ) {
+    for (const fisRaceId of raceMeta.fisRaceIds) {
+      try {
+        const { results } = await syncRaceResults(id, fisRaceId);
+        if (results >= 3) break; // Valid podium found
+      } catch {
+        // Ignore failures — we'll just show upcoming state
+      }
+    }
+  }
 
   const race = await prisma.race.findUnique({
     where: { id },
@@ -37,37 +61,42 @@ export default async function RacePage({ params }: { params: Promise<{ id: strin
     },
   });
 
-  // Get athletes for the prediction picker (top athletes from FIS for this discipline/gender)
-  // If the race is completed, use its actual result athletes; otherwise use a broader list
+  // Build athlete pool for the prediction picker.
+  // Priority: (1) race's own results if completed, (2) athletes from other completed
+  // same-gender races in DB, (3) FIS seed fetch (cached 24h by Next.js — fast after first load).
   let athletePool: { id: string; name: string; nationCode: string }[] = [];
 
   if (race.results.length > 0) {
+    // Completed race — use its own result list
     athletePool = race.results.map((r) => ({
       id: r.athlete.id,
       name: r.athlete.name,
       nationCode: r.athlete.nationCode,
     }));
   } else {
-    // Show athletes who have appeared in recent completed races of the same gender
-    const recentResults = await prisma.result.findMany({
-      where: {
-        race: { gender: race.gender, status: "completed" },
-        rank: { lte: 30 },
-      },
+    // Upcoming race — build athlete pool from all synced same-gender results in the DB.
+    // Calculate accumulated WC points so athletes are ordered by current season standing.
+    // This updates automatically whenever new race results are synced.
+    const allResults = await prisma.result.findMany({
+      where: { race: { gender: race.gender, status: "completed" } },
       include: { athlete: true },
-      orderBy: { rank: "asc" },
-      take: 200,
     });
-    const seen = new Set<string>();
-    for (const r of recentResults) {
-      if (!seen.has(r.athlete.id)) {
-        seen.add(r.athlete.id);
-        athletePool.push({
-          id: r.athlete.id,
-          name: r.athlete.name,
-          nationCode: r.athlete.nationCode,
-        });
+
+    if (allResults.length > 0) {
+      const points = new Map<string, number>();
+      const athleteMap = new Map<string, { name: string; nationCode: string }>();
+      for (const r of allResults) {
+        athleteMap.set(r.athlete.id, { name: r.athlete.name, nationCode: r.athlete.nationCode });
+        points.set(r.athlete.id, (points.get(r.athlete.id) ?? 0) + wcPoints(r.rank));
       }
+      athletePool = Array.from(athleteMap.entries())
+        .map(([id, { name, nationCode }]) => ({ id, name, nationCode, pts: points.get(id) ?? 0 }))
+        .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name))
+        .map(({ id, name, nationCode }) => ({ id, name, nationCode }));
+    } else {
+      // No results synced yet — fall back to FIS-fetched pool sorted by accumulated
+      // WC points from the hardcoded season race list (cached 24h by Next.js).
+      athletePool = await fetchAthletePool(race.gender);
     }
   }
 

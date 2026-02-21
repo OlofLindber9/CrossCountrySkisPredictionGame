@@ -16,7 +16,7 @@ model Profile {
 }
 
 model Race {
-  id          String   @id // FIS race ID, e.g. "46737"
+  id          String   @id // FIS event ID + gender, e.g. "58060-W"
   name        String   // e.g. "Women Sprint Classic - Ruka"
   venue       String   // e.g. "Ruka"
   country     String   // e.g. "FIN"
@@ -25,6 +25,7 @@ model Race {
   gender      String   // "M" or "W"
   season      String   // e.g. "2025-2026"
   status      String   @default("upcoming") // "upcoming" | "completed"
+  fisRaceIds  String[] @default([]) // FIS individual race IDs for this event (used for auto-sync)
   results     Result[]
   predictions Prediction[]
   createdAt   DateTime @default(now())
@@ -35,6 +36,7 @@ model Athlete {
   id         String   @id // FIS competitor ID
   name       String
   nationCode String
+  gender     String?  // "M" or "W", set when seeded from a gender-specific race
   results    Result[]
 }
 

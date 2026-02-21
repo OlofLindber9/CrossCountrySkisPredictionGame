@@ -1,8 +1,29 @@
 import { prisma } from "@/lib/prisma";
+import { syncCalendar, syncCompletedRaces } from "@/lib/fis/sync";
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { format, disciplineColor, genderLabel } from "@/lib/utils";
 
+async function refreshCalendarAction() {
+  "use server";
+  await syncCalendar();
+  revalidatePath("/races");
+}
+
+async function syncResultsAction() {
+  "use server";
+  await syncCompletedRaces();
+  revalidatePath("/races");
+}
+
 export default async function RacesPage() {
+  // Only hit FIS when the DB has no races yet. After that, data comes
+  // straight from the DB so the page stays fast.
+  const raceCount = await prisma.race.count();
+  if (raceCount === 0) {
+    await syncCalendar().catch(() => {});
+  }
+
   const races = await prisma.race.findMany({
     orderBy: { date: "asc" },
     include: { _count: { select: { predictions: true, results: true } } },
@@ -15,15 +36,26 @@ export default async function RacesPage() {
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-ski-blue">Races</h1>
-        <span className="text-gray-400 text-sm">{races.length} total this season</span>
+        <div className="flex gap-2">
+          <form action={syncResultsAction}>
+            <button type="submit" className="btn-primary text-sm">
+              Sync results
+            </button>
+          </form>
+          <form action={refreshCalendarAction}>
+            <button type="submit" className="btn-secondary text-sm">
+              Refresh calendar
+            </button>
+          </form>
+        </div>
       </div>
 
       {races.length === 0 && (
         <div className="card text-center py-12">
           <div className="text-4xl mb-3">📅</div>
-          <p className="text-gray-500 mb-4">No races loaded yet.</p>
+          <p className="text-gray-500 mb-4">Could not load races from FIS.</p>
           <p className="text-sm text-gray-400">
-            An admin needs to sync the FIS calendar via the API first.
+            Check your internet connection and try refreshing.
           </p>
         </div>
       )}

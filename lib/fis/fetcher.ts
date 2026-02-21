@@ -7,6 +7,7 @@
  * Both return HTML that we parse with cheerio.
  */
 import * as cheerio from "cheerio";
+import { wcPoints } from "@/lib/utils";
 
 const BASE = "https://data.fis-ski.com";
 
@@ -67,55 +68,82 @@ export async function fetchResults(raceId: string): Promise<FisResult[]> {
 function parseCalendar(html: string, seasonCode: string): FisRace[] {
   const $ = cheerio.load(html);
   const races: FisRace[] = [];
+  const season = `${parseInt(seasonCode) - 1}-${seasonCode}`;
 
-  // Each race row has class "event-header" or is inside a table-like structure.
-  // FIS calendar HTML wraps events in divs with data-raceid attributes.
-  $("[data-raceid]").each((_, el) => {
-    const raceId = $(el).attr("data-raceid");
-    if (!raceId) return;
+  // The FIS calendar HTML wraps each event weekend in:
+  //   <div class="table-row reset-padding" data-navstart="28" data-navend="30"
+  //        data-navmonth="11" id="58060">
+  // The id is the FIS event ID. We create one Race entry per gender per event.
+  $("div.table-row.reset-padding[id]").each((_, el) => {
+    const eventId = $(el).attr("id");
+    if (!eventId || !/^\d+$/.test(eventId)) return;
 
-    // Gender is in a sibling/parent with class "gender" or data-gender
-    const gender = $(el).attr("data-gender") || detectGender($, el);
-    const discipline = $(el).attr("data-disciplinecode") || extractDiscipline($, el);
-    const dateStr = $(el).attr("data-date") || $(el).find(".date").text().trim();
-    const venue = $(el).find(".venue, .place").first().text().trim() ||
-                  $(el).attr("data-place") || "";
-    const country = $(el).attr("data-nationcode") || extractCountry($, el);
+    // --- Date ---
+    // Extract year from the date link text, e.g. "28-30 Nov 2025"
+    const dateLinkText = $(el).find("a[href*='eventid=']").first().text().trim();
+    const navMonth = parseInt($(el).attr("data-navmonth") || "1");
+    const navStart = parseInt($(el).attr("data-navstart") || "1");
+    const yearMatch = dateLinkText.match(/\b(20\d\d)\b/);
+    const year = yearMatch ? parseInt(yearMatch[1]) : parseInt(seasonCode);
+    const date = new Date(year, navMonth - 1, navStart);
 
-    const date = parseFisDate(dateStr);
-    if (!date) return; // skip rows we can't parse
-
-    const name = buildRaceName(venue, discipline, gender);
-    const season = `${parseInt(seasonCode) - 1}-${seasonCode}`;
-
-    races.push({ id: raceId, name, venue, country, date, discipline, gender, season });
-  });
-
-  // Fallback: parse anchor links to results pages — these always contain raceid
-  if (races.length === 0) {
-    $("a[href*='raceid=']").each((_, el) => {
-      const href = $(el).attr("href") || "";
-      const match = href.match(/raceid=(\d+)/);
-      if (!match) return;
-      const raceId = match[1];
-
-      // Avoid duplicates
-      if (races.some((r) => r.id === raceId)) return;
-
-      const rowEl = $(el).closest("tr, .event-row, .table-row");
-      const text = rowEl.text();
-      const gender = text.match(/\bWomen\b/i) ? "W" : text.match(/\bMen\b/i) ? "M" : "M";
-      const discipline = extractDisciplineFromText(text);
-      const venue = rowEl.find("td").eq(2).text().trim() || extractVenueFromLink($(el).text());
-      const country = rowEl.find(".country, .nat").first().text().trim().toUpperCase().slice(0, 3);
-      const dateText = rowEl.find("td").first().text().trim();
-      const date = parseFisDate(dateText) || new Date();
-      const season = `${parseInt(seasonCode) - 1}-${seasonCode}`;
-      const name = buildRaceName(venue, discipline, gender);
-
-      races.push({ id: raceId, name, venue, country, date, discipline, gender, season });
+    // --- Venue ---
+    // The venue name appears in several responsive variants; grab first non-empty text
+    let venue = "";
+    $(el).find(".clip-xs").each((_, v) => {
+      const t = $(v).text().trim();
+      if (t && !venue) venue = t;
     });
-  }
+    if (!venue) {
+      $(el).find(".font_md_large, .font_lg_large").each((_, v) => {
+        const t = $(v).text().trim();
+        if (t && !venue) venue = t;
+      });
+    }
+
+    // --- Country ---
+    const country = $(el).find(".country__name-short").first().text().trim();
+
+    // --- Disciplines ---
+    // The split-row items contain e.g. "WC • SPWQ" and "2x10k 4xSP 2x30k"
+    const splitItems: string[] = [];
+    $(el).find(".split-row__item .clip").each((_, v) => {
+      const t = $(v).text().trim();
+      if (t) splitItems.push(t);
+    });
+    // Second item is the race formats; first is the category codes
+    const disciplineRaw = splitItems[1] || splitItems[0] || "";
+    const discipline = extractDisciplineFromText(disciplineRaw);
+
+    // --- Genders ---
+    const hasW = $(el).find(".gender__item_l").length > 0;
+    const hasM = $(el).find(".gender__item_m").length > 0;
+
+    if (hasW) {
+      races.push({
+        id: `${eventId}-W`,
+        name: `Women ${discipline} - ${venue}`,
+        venue,
+        country,
+        date,
+        discipline,
+        gender: "W",
+        season,
+      });
+    }
+    if (hasM) {
+      races.push({
+        id: `${eventId}-M`,
+        name: `Men ${discipline} - ${venue}`,
+        venue,
+        country,
+        date,
+        discipline,
+        gender: "M",
+        season,
+      });
+    }
+  });
 
   return races;
 }
@@ -213,20 +241,84 @@ function parseResults(html: string): FisResult[] {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Athlete pool (for prediction forms on upcoming races)
 // ---------------------------------------------------------------------------
 
-function detectGender($: cheerio.CheerioAPI, el: cheerio.Element): string {
-  const row = $(el).closest("tr, .event-row, [class*='event']");
-  const text = row.text().toLowerCase();
-  if (text.includes("women") || text.includes("w ")) return "W";
-  return "M";
+/**
+ * Confirmed individual WC race IDs for the 2025-26 season, by gender.
+ * Sorted roughly chronologically. Relay/team-sprint IDs are excluded since
+ * they don't map cleanly to individual athletes.
+ * Update this list as more races are completed each season.
+ */
+const WC_SEASON_RACES: Record<string, string[]> = {
+  M: [
+    // Ruka (Nov 28-30)
+    "49463", "49465", "49467",
+    // Lillehammer (Dec 6-8)
+    "49477", "49479",
+    // Davos (Dec 13-15)
+    "49489", "49491",
+    // Toblach / Tour de Ski (Dec 27 – Jan 5)
+    "49541", "49547", "49549",
+  ],
+  W: [
+    // Ruka (Nov 28-30)
+    "49464", "49466", "49468",
+    // Lillehammer (Dec 6-8)
+    "49478",
+    // Davos (Dec 13-15)
+    "49490",
+    // Toblach / Tour de Ski (Dec 27 – Jan 5)
+    "49542", "49548",
+    // Goms (Jan 23)
+    "49500",
+  ],
+};
+
+/**
+ * Fetch the athlete pool for a given gender, sorted by accumulated WC points
+ * across all confirmed season races (best approximation of WC standings).
+ * Each individual FIS fetch is cached for 24 h by Next.js so repeat loads
+ * are served instantly from the cache.
+ */
+export async function fetchAthletePool(
+  gender: string
+): Promise<{ id: string; name: string; nationCode: string }[]> {
+  const raceIds = WC_SEASON_RACES[gender] ?? [];
+  const points = new Map<string, number>();
+  const athleteData = new Map<string, { name: string; nationCode: string }>();
+
+  for (const fisRaceId of raceIds) {
+    try {
+      const url =
+        `${BASE}/fis_events/ajax/raceresultsfunctions/details.html` +
+        `?sectorcode=CC&raceid=${fisRaceId}&competitors=`;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SkiPredictor/1.0)" },
+        cache: "no-store", // FIS HTML is 2-5 MB — too large for Next.js fetch cache
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const results = parseResults(html);
+      for (const r of results) {
+        athleteData.set(r.athleteId, { name: r.athleteName, nationCode: r.nationCode });
+        points.set(r.athleteId, (points.get(r.athleteId) ?? 0) + wcPoints(r.rank));
+      }
+    } catch {
+      // Ignore individual race failures
+    }
+  }
+
+  // Sort by accumulated WC points descending; alphabetical as tiebreaker
+  return Array.from(athleteData.entries())
+    .map(([id, { name, nationCode }]) => ({ id, name, nationCode, pts: points.get(id) ?? 0 }))
+    .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name))
+    .map(({ id, name, nationCode }) => ({ id, name, nationCode }));
 }
 
-function extractDiscipline($: cheerio.CheerioAPI, el: cheerio.Element): string {
-  const text = $(el).text().toLowerCase();
-  return extractDisciplineFromText(text);
-}
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function extractDisciplineFromText(text: string): string {
   const t = text.toLowerCase();
@@ -239,20 +331,6 @@ function extractDisciplineFromText(text: string): string {
   if (t.includes("15")) return "Distance 15k";
   if (t.includes("10")) return "Distance 10k";
   return "Distance";
-}
-
-function extractCountry($: cheerio.CheerioAPI, el: cheerio.Element): string {
-  const row = $(el).closest("tr, .event-row");
-  return row.find(".country, .nat, [class*='nation']").first().text().trim().slice(0, 3).toUpperCase();
-}
-
-function extractVenueFromLink(text: string): string {
-  return text.replace(/\d{4}/, "").replace(/WC|CC|SP|DS/g, "").trim();
-}
-
-function buildRaceName(venue: string, discipline: string, gender: string): string {
-  const g = gender === "W" ? "Women" : "Men";
-  return `${g} ${discipline} - ${venue}`.trim();
 }
 
 function parseFisDate(dateStr: string): Date | null {

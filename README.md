@@ -92,22 +92,18 @@ Open **http://localhost:3000** in your browser.
 
 ## Loading race data (FIS sync)
 
-Race data is pulled from the FIS website. After starting the app:
+Race data is pulled from the FIS website. The calendar syncs automatically when any user visits the Races page. You only need to manually trigger results after a race finishes.
 
-**Sync the calendar** (loads upcoming races):
+**Sync results for a completed race:**
 ```
-curl -X POST http://localhost:3000/api/fis/sync
-```
-
-**Sync results for a specific race** (after a race finishes):
-```
-curl -X POST "http://localhost:3000/api/fis/sync?action=results&raceId=46737"
+curl -X POST "http://localhost:3000/api/fis/sync?action=results&raceId=58060-W&fisRaceId=49729"
 ```
 
-Where `46737` is the FIS race ID from the URL at fis-ski.com.
-Example: `https://www.fis-ski.com/DB/general/results.html?sectorcode=CC&raceid=46737`
+- `raceId` — our internal ID: `{eventId}-W` or `{eventId}-M`. The event ID is visible in the URL when you hover over a race on our Races page (e.g. `/races/58060-W`).
+- `fisRaceId` — the race ID from fis-ski.com. Find it in the results URL:
+  `https://www.fis-ski.com/DB/general/results.html?sectorcode=CC&raceid=49729` → `fisRaceId=49729`
 
-Syncing results also automatically **scores all predictions** for that race.
+Syncing results automatically **scores all predictions** for that race.
 
 > For production, set up a cron job (e.g., via Vercel Cron or a free service like cron-job.org) to call the sync endpoints on race days.
 
