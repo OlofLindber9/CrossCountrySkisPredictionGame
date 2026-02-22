@@ -38,6 +38,16 @@ export default function LoginPage() {
         style={{ background: "rgba(5,14,26,0.65)" }}
       />
 
+      <div 
+        className="absolute inset-0 z-0 opacity-25 mix-blend-luminosity"
+        style={{
+          backgroundImage: "url('/images/klaebo winner.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "40% center", // Shifts image slightly left
+          backgroundRepeat: "no-repeat"
+        }}
+      />
+
       {/* Gold top accent */}
       <div
         className="absolute top-0 left-0 right-0 h-[2px]"
@@ -122,7 +132,7 @@ export default function LoginPage() {
           <p className="text-center text-white/35 text-sm mt-5">
             No account?{" "}
             <Link href="/signup" className="text-ski-accent hover:text-ski-gold font-semibold transition-colors">
-              Sign up free
+              Sign up
             </Link>
           </p>
         </div>

@@ -45,6 +45,17 @@ export default function SignupPage() {
           className="absolute inset-0 pointer-events-none"
           style={{ background: "rgba(5,14,26,0.65)" }}
         />
+        
+      <div 
+        className="absolute inset-0 z-0 opacity-25 mix-blend-luminosity"
+        style={{
+          backgroundImage: "url('/images/klaebo winner.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "40% center", // Shifts image slightly left
+          backgroundRepeat: "no-repeat"
+        }}
+      />
+
         <div
           className="absolute top-0 left-0 right-0 h-[2px]"
           style={{
@@ -87,6 +98,16 @@ export default function SignupPage() {
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: "rgba(5,14,26,0.65)" }}
+      />
+
+      <div 
+        className="absolute inset-0 z-0 opacity-25 mix-blend-luminosity"
+        style={{
+          backgroundImage: "url('/images/klaebo winner.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "40% center", // Shifts image slightly left
+          backgroundRepeat: "no-repeat"
+        }}
       />
 
       {/* Gold top accent */}

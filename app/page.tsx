@@ -62,7 +62,7 @@ export default async function Home() {
         {/* Top nav strip */}
         <div className="flex justify-between items-center max-w-5xl mx-auto w-full py-5">
           <span className="text-white/60 font-bold tracking-widest text-xs uppercase">
-            ⛷️&nbsp;&nbsp;FIS Cross-Country
+            &nbsp;&nbsp;FIS Cross-Country
           </span>
           <div className="flex items-center gap-4">
             <Link
@@ -87,7 +87,7 @@ export default async function Home() {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-ski-accent/40 text-ski-accent text-xs font-bold tracking-widest uppercase mb-8 animate-slide-down"
             style={{ background: "rgba(232,160,32,0.1)" }}
           >
-            🏔️&nbsp;&nbsp;2025 / 26 World Cup Season
+            &nbsp;&nbsp;2025 / 26 World Cup Season
           </div>
 
           {/* Title */}
@@ -124,7 +124,7 @@ export default async function Home() {
                 letterSpacing: "0.02em",
               }}
             >
-              Get started free →
+              Get started →
             </Link>
             <Link href="/login" className="btn-ghost px-8 py-3.5 text-base rounded-2xl">
               Log in
@@ -132,75 +132,7 @@ export default async function Home() {
           </div>
         </div>
 
-        {/* ── Feature cards ─────────────────────────────────────── */}
-        <div className="max-w-4xl mx-auto w-full pb-14">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-            {[
-              {
-                icon: "🏆",
-                title: "Create a Group",
-                desc: "Invite friends with a short code and compete head-to-head all season.",
-                delay: "0.1s",
-              },
-              {
-                icon: "📋",
-                title: "Predict the Podium",
-                desc: "Pick the top 3 finishers before each race locks. Up to 5 points per race.",
-                delay: "0.2s",
-              },
-              {
-                icon: "📊",
-                title: "Track Standings",
-                desc: "Live leaderboard updates after every race. Who will top the table?",
-                delay: "0.3s",
-              },
-            ].map((f) => (
-              <div
-                key={f.title}
-                className="glass-card group hover:border-white/40 transition-all duration-300 hover:-translate-y-1 anim-ready animate-slide-up"
-                style={{ animationDelay: f.delay }}
-              >
-                <div className="text-4xl mb-3 group-hover:scale-110 transition-transform duration-200">
-                  {f.icon}
-                </div>
-                <h3
-                  className="text-white font-bold text-xl mb-2"
-                  style={{ fontFamily: "var(--font-barlow), 'Barlow Condensed', sans-serif" }}
-                >
-                  {f.title}
-                </h3>
-                <p className="text-ski-ice/65 text-sm leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Scoring strip */}
-          <div
-            className="glass-card text-center anim-ready animate-slide-up-2"
-            style={{ animationDelay: "0.4s" }}
-          >
-            <p className="text-white/40 text-[10px] uppercase tracking-[0.2em] font-bold mb-3">
-              Scoring system
-            </p>
-            <div className="flex flex-wrap justify-center gap-8 text-white">
-              {[
-                { pts: "3", label: "correct winner" },
-                { pts: "+1", label: "2nd in top 3" },
-                { pts: "+1", label: "3rd in top 3" },
-              ].map((s) => (
-                <div key={s.label} className="flex items-baseline gap-1.5">
-                  <span
-                    className="text-ski-accent font-black text-3xl"
-                    style={{ fontFamily: "var(--font-barlow), sans-serif" }}
-                  >
-                    {s.pts}
-                  </span>
-                  <span className="text-white/50 text-xs">pts &mdash; {s.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        
 
         {/* Footer */}
         <div className="border-t border-white/10 py-4 text-center text-white/25 text-xs">
