@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { format, disciplineColor, genderLabel, wcPoints } from "@/lib/utils";
 import PredictionForm from "@/components/PredictionForm";
@@ -139,8 +140,8 @@ export default async function RacePage({ params }: { params: Promise<{ id: strin
         <div className="glass-card text-center py-8">
           <p className="text-white/50 mb-3">Join or create a group to make predictions.</p>
           <div className="flex gap-3 justify-center">
-            <a href="/groups/create" className="btn-primary text-sm">Create group</a>
-            <a href="/groups/join" className="btn-secondary text-sm">Join group</a>
+            <Link href="/groups/create" className="btn-primary text-sm">Create group</Link>
+            <Link href="/groups/join" className="btn-secondary text-sm">Join group</Link>
           </div>
         </div>
       ) : (

@@ -23,8 +23,6 @@ export default async function GroupPage({ params }: { params: Promise<{ id: stri
   const isMember = group.members.some((m) => m.userId === userId);
   if (!isMember) notFound();
 
-  const isOwner = group.createdBy === userId;
-
   // All predictions for this group, with scores
   const predictions = await prisma.prediction.findMany({
     where: { groupId: id },
