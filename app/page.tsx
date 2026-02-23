@@ -36,19 +36,6 @@ export default async function Home() {
         }}
       />
 
-      {/* Animated speed lines */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-        <div className="speed-line w-3/4" style={{ top: "28%", animationDelay: "0s" }} />
-        <div
-          className="speed-line w-1/2"
-          style={{ top: "40%", animationDelay: "0.9s", opacity: 0.4 }}
-        />
-        <div
-          className="speed-line w-2/3"
-          style={{ top: "57%", animationDelay: "1.8s", opacity: 0.3 }}
-        />
-      </div>
-
       {/* Gold accent top bar */}
       <div
         className="absolute top-0 left-0 right-0 h-[2px]"
@@ -110,7 +97,7 @@ export default async function Home() {
             className="text-ski-ice/75 text-lg sm:text-xl max-w-lg mx-auto mb-10 anim-ready animate-slide-up"
           >
             Challenge your friends. Predict the podiums. Conquer the{" "}
-            <span className="text-ski-accent font-semibold">FIS World Cup</span> leaderboard.
+            <span className="text-ski-accent font-semibold">FIS World Cup</span> season.
           </p>
 
           {/* CTA buttons */}
@@ -135,8 +122,14 @@ export default async function Home() {
         
 
         {/* Footer */}
-        <div className="border-t border-white/10 py-4 text-center text-white/25 text-xs">
-          Powered by FIS official data &middot; Not affiliated with FIS
+        <div className="border-t border-white/10 py-4 text-center text-white/25 text-xs flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4">
+          <span>Powered by FIS official data &middot; Not affiliated with FIS</span>
+          <a
+            href="mailto:ololin0725@gmail.com?subject=Ski%20Predictor%20Feedback"
+            className="text-white/35 hover:text-ski-accent transition-colors"
+          >
+            Got any feedback? →
+          </a>
         </div>
       </div>
     </main>
