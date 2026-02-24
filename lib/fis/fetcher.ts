@@ -31,6 +31,14 @@ export interface FisResult {
   rank: number | null;
 }
 
+export interface FisStanding {
+  athleteId: string;
+  athleteName: string;
+  nationCode: string;
+  points: number;
+  gender: string;
+}
+
 /** Fetch World Cup cross-country calendar for a given season (e.g. "2026") */
 export async function fetchCalendar(seasonCode: string): Promise<FisRace[]> {
   const url =
@@ -303,6 +311,73 @@ function parseResults(html: string): FisResult[] {
     if (b.rank === null) return -1;
     return a.rank - b.rank;
   });
+}
+
+// ---------------------------------------------------------------------------
+// WC Standings
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch the current overall FIS World Cup standings for a given gender.
+ * Scrapes the FIS DB cup-standings page, which uses the same .table-row HTML
+ * structure as other FIS DB pages.
+ */
+export async function fetchWcStandings(
+  gender: string,
+  seasonCode: string
+): Promise<FisStanding[]> {
+  const genderCode = gender === "M" ? "M" : "W";
+  const url =
+    `https://www.fis-ski.com/DB/general/cup-standings.html` +
+    `?sectorcode=CC&seasoncode=${seasonCode}&cupcode=WC&disciplinecode=ALL` +
+    `&gendercode=${genderCode}&mi=menu-cup-standings`;
+
+  const res = await fetch(url, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; SkiPredictor/1.0)" },
+    cache: "no-store",
+  });
+
+  if (!res.ok) throw new Error(`FIS standings fetch failed: ${res.status}`);
+  const html = await res.text();
+  return parseWcStandings(html, gender);
+}
+
+function parseWcStandings(html: string, gender: string): FisStanding[] {
+  const $ = cheerio.load(html);
+  const standings: FisStanding[] = [];
+  const seen = new Set<string>();
+
+  // FIS DB pages use .table-row for each athlete; athlete link contains competitorid
+  $(".table-row").each((_, row) => {
+    const $row = $(row);
+    const $link = $row.find("a[href*='competitorid=']").first();
+    if ($link.length === 0) return;
+
+    const href = $link.attr("href") || "";
+    const idMatch = href.match(/[?&]competitorid=(\d+)/);
+    if (!idMatch) return;
+
+    const athleteId = idMatch[1];
+    if (seen.has(athleteId)) return;
+
+    const name = $link.text().trim();
+    if (!name || name.length < 2) return;
+
+    const nationCode = $row.find(".country__name-short").first().text().trim().toUpperCase();
+
+    // Points: largest integer in the row within a plausible WC points range.
+    // Rank is at most ~100; season-end leaders reach ~2000 pts.
+    // FIS competitor IDs (6 digits) are excluded by the ≤ 9999 cap.
+    const nums = ($row.text().match(/\b\d+\b/g) || [])
+      .map(Number)
+      .filter((n) => n >= 1 && n <= 9999);
+    const points = nums.length > 0 ? Math.max(...nums) : 0;
+
+    seen.add(athleteId);
+    standings.push({ athleteId, athleteName: name, nationCode, points, gender });
+  });
+
+  return standings.sort((a, b) => b.points - a.points);
 }
 
 // ---------------------------------------------------------------------------

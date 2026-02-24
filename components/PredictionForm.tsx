@@ -37,9 +37,12 @@ export default function PredictionForm({
   locked = false,
 }: Props) {
   const [selectedGroup, setSelectedGroup] = useState(groups[0]?.id || "");
-  const [first, setFirst] = useState("");
-  const [second, setSecond] = useState("");
-  const [third, setThird] = useState("");
+
+  // Pre-fill form from the existing prediction for the initial group
+  const initialPred = existingPredictions.find((p) => p.groupId === groups[0]?.id);
+  const [first, setFirst] = useState(initialPred?.first || "");
+  const [second, setSecond] = useState(initialPred?.second || "");
+  const [third, setThird] = useState(initialPred?.third || "");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -50,7 +53,6 @@ export default function PredictionForm({
 
   const existing = existingPredictions.find((p) => p.groupId === selectedGroup);
 
-  // Pre-fill when switching groups
   function handleGroupChange(groupId: string) {
     setSelectedGroup(groupId);
     const pred = existingPredictions.find((p) => p.groupId === groupId);
@@ -75,6 +77,10 @@ export default function PredictionForm({
 
   function athleteName(id: string) {
     return athletePool.find((a) => a.id === id)?.name || id;
+  }
+
+  function athleteNation(id: string) {
+    return athletePool.find((a) => a.id === id)?.nationCode || "";
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -142,11 +148,36 @@ export default function PredictionForm({
   }
 
   return (
-    <div className="glass-card space-y-5">
+    <div
+      className="glass-card space-y-5"
+      style={existing && !isLocked ? { borderColor: "rgba(52, 211, 153, 0.35)" } : undefined}
+    >
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="font-bold text-white">
-          {isLocked ? "Your prediction" : "Make your prediction"}
-        </h2>
+        <div className="flex items-center gap-2">
+          <h2 className="font-bold text-white">
+            {isLocked || existing ? "Your prediction" : "Make your prediction"}
+          </h2>
+          {existing && !isLocked && (
+            <span
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border"
+              style={{
+                background: "rgba(52, 211, 153, 0.12)",
+                borderColor: "rgba(52, 211, 153, 0.3)",
+                color: "rgb(110, 231, 183)",
+              }}
+            >
+              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Submitted
+            </span>
+          )}
+        </div>
         {existing?.score !== null && existing?.score !== undefined && (
           <span className="text-ski-accent font-bold text-lg">{existing.score} pts</span>
         )}
@@ -155,7 +186,9 @@ export default function PredictionForm({
       {/* Group selector */}
       {groups.length > 1 && (
         <div>
-          <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-1.5">Group</label>
+          <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-1.5">
+            Group
+          </label>
           <select
             value={selectedGroup}
             onChange={(e) => handleGroupChange(e.target.value)}
@@ -170,7 +203,37 @@ export default function PredictionForm({
         </div>
       )}
 
-      {/* Read-only prediction summary (race is locked — past or completed) */}
+      {/* Current picks summary — shown when prediction exists and race is still editable */}
+      {existing && !isLocked && (
+        <div
+          className="rounded-xl p-3 space-y-2"
+          style={{
+            background: "rgba(52, 211, 153, 0.06)",
+            border: "1px solid rgba(52, 211, 153, 0.2)",
+          }}
+        >
+          <p
+            className="text-xs font-semibold uppercase tracking-wider"
+            style={{ color: "rgba(110, 231, 183, 0.65)" }}
+          >
+            Current picks
+          </p>
+          {[
+            { medal: "🥇", id: existing.first },
+            { medal: "🥈", id: existing.second },
+            { medal: "🥉", id: existing.third },
+          ].map(({ medal, id }) => (
+            <div key={id} className="flex items-center gap-2">
+              <span className="text-base leading-none">{medal}</span>
+              <span className="text-sm text-white/85 font-medium">{athleteName(id)}</span>
+              <span className="ml-auto text-xs text-white/35">{athleteNation(id)}</span>
+            </div>
+          ))}
+          <p className="text-xs text-white/30 pt-0.5">Use the dropdowns below to change</p>
+        </div>
+      )}
+
+      {/* Read-only prediction summary — race is locked (past or completed) */}
       {isLocked && existing ? (
         <div className="space-y-2">
           {[
@@ -180,13 +243,14 @@ export default function PredictionForm({
           ].map(({ pos, id }) => {
             const medals = ["🥇", "🥈", "🥉"];
             return (
-              <div key={pos} className="flex items-center gap-3 p-3 rounded-xl border border-white/10"
-                style={{ background: "rgba(255,255,255,0.06)" }}>
+              <div
+                key={pos}
+                className="flex items-center gap-3 p-3 rounded-xl border border-white/10"
+                style={{ background: "rgba(255,255,255,0.06)" }}
+              >
                 <span className="text-xl">{medals[pos - 1]}</span>
                 <span className="font-medium text-white/90">{athleteName(id)}</span>
-                <span className="text-white/40 text-sm ml-auto">
-                  {athletePool.find((a) => a.id === id)?.nationCode}
-                </span>
+                <span className="text-white/40 text-sm ml-auto">{athleteNation(id)}</span>
               </div>
             );
           })}
@@ -214,7 +278,9 @@ export default function PredictionForm({
           <AthleteSelect label="3rd place" value={third} onChange={setThird} position={3} />
 
           {error && (
-            <div className="text-red-300 text-sm bg-red-900/30 border border-red-500/30 rounded-xl px-4 py-2.5">{error}</div>
+            <div className="text-red-300 text-sm bg-red-900/30 border border-red-500/30 rounded-xl px-4 py-2.5">
+              {error}
+            </div>
           )}
           {success && (
             <div className="text-emerald-300 text-sm bg-emerald-900/30 border border-emerald-500/30 rounded-xl px-4 py-2.5">
@@ -225,12 +291,6 @@ export default function PredictionForm({
           <button type="submit" disabled={loading || isLocked} className="btn-primary w-full">
             {loading ? "Saving…" : existing ? "Update prediction" : "Submit prediction"}
           </button>
-
-          {existing && !isLocked && (
-            <p className="text-xs text-white/40 text-center">
-              You already have a prediction for this group — submitting will update it.
-            </p>
-          )}
         </form>
       )}
 

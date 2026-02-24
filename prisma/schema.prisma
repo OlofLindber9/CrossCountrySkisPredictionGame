@@ -37,6 +37,7 @@ model Athlete {
   name       String
   nationCode String
   gender     String?  // "M" or "W", set when seeded from a gender-specific race
+  wcPoints   Int      @default(0) // Current season overall WC standings points
   results    Result[]
 }
 

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { syncCalendar, syncRaceResults, syncCompletedRaces } from "@/lib/fis/sync";
+import { syncCalendar, syncRaceResults, syncCompletedRaces, syncWcStandings } from "@/lib/fis/sync";
 
-// POST /api/fis/sync                                   — sync calendar
-// POST /api/fis/sync?action=results&raceId=58060-W&fisRaceId=49729 — sync one race
-// POST /api/fis/sync?action=auto                       — sync all past races
+// POST /api/fis/sync                                     — sync calendar
+// POST /api/fis/sync?action=results&raceId=X&fisRaceId=Y — sync one race
+// POST /api/fis/sync?action=auto                         — sync all past races + standings
+// POST /api/fis/sync?action=standings                    — sync WC standings only
 export async function POST(request: Request) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
@@ -22,6 +23,11 @@ export async function POST(request: Request) {
     if (action === "auto") {
       const { synced } = await syncCompletedRaces();
       return NextResponse.json({ ok: true, synced });
+    }
+
+    if (action === "standings") {
+      const { men, women } = await syncWcStandings();
+      return NextResponse.json({ ok: true, men, women });
     }
 
     const total = await syncCalendar();

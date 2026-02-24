@@ -120,7 +120,7 @@ function RaceCard({
   return (
     <Link
       href={`/races/${race.id}`}
-      className={`glass-card hover:border-white/30 hover:shadow-xl transition-all flex items-center justify-between gap-4 ${isPast && !isCompleted ? "opacity-50" : ""}`}
+      className={`glass-card hover:border-white/30 hover:shadow-xl transition-all flex items-center justify-between gap-4 overflow-hidden ${isPast && !isCompleted ? "opacity-50" : ""}`}
     >
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-1.5 mb-1">
@@ -134,12 +134,12 @@ function RaceCard({
           {!isCompleted && isPast && <span className="badge badge-gray">Past</span>}
         </div>
         <div className="font-semibold text-white truncate">{race.name}</div>
-        <div className="text-sm text-white/40 mt-0.5">
+        <div className="text-sm text-white/40 mt-0.5 truncate">
           {format(race.date)} · {race.venue}, {race.country}
         </div>
         {winner && (
-          <div className="text-sm text-white/50 mt-1">
-            🥇 {winner.name} <span className="text-white/30">({winner.nationCode})</span>
+          <div className="text-sm text-white/50 mt-1 truncate">
+            🥇 {winner.name} ({winner.nationCode})
           </div>
         )}
       </div>

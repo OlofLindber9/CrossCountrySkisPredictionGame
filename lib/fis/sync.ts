@@ -112,6 +112,36 @@ export async function syncRaceResults(
   return { results: fisResults.length, scored };
 }
 
+
+/**
+ * Sync WC standings for both genders from FIS and update athlete wcPoints in DB.
+ * Called automatically after syncCompletedRaces so the athlete pool stays current.
+ */
+export async function syncWcStandings(): Promise<{ men: number; women: number }> {
+  const seasonCode = currentSeasonCode();
+  let men = 0;
+  let women = 0;
+
+  for (const gender of ['M', 'W'] as const) {
+    try {
+      const standings = await fetchWcStandings(gender, seasonCode);
+      for (const s of standings) {
+        await prisma.athlete.upsert({
+          where: { id: s.athleteId },
+          update: { name: s.athleteName, nationCode: s.nationCode, gender, wcPoints: s.points },
+          create: { id: s.athleteId, name: s.athleteName, nationCode: s.nationCode, gender, wcPoints: s.points },
+        });
+      }
+      if (gender === 'M') men = standings.length;
+      else women = standings.length;
+    } catch {
+      // Non-fatal — standings sync failure does not block result sync
+    }
+  }
+
+  return { men, women };
+}
+
 /**
  * Auto-sync results for all past races that are still marked "upcoming".
  * For each such race, tries each fisRaceId in order and uses the first one
@@ -145,6 +175,11 @@ export async function syncCompletedRaces(): Promise<{ synced: number }> {
         // Ignore individual FIS fetch failures
       }
     }
+  }
+
+  // Keep the athlete pool sorted by real standings after any race is processed
+  if (synced > 0) {
+    await syncWcStandings().catch(() => {}); // non-fatal
   }
 
   return { synced };

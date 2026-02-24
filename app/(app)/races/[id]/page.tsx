@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { format, disciplineColor, genderLabel, wcPoints } from "@/lib/utils";
+import { format, disciplineColor, genderLabel } from "@/lib/utils";
 import PredictionForm from "@/components/PredictionForm";
 import ResultsPodium from "@/components/ResultsPodium";
 import { fetchAthletePool } from "@/lib/fis/fetcher";
@@ -57,9 +57,9 @@ export default async function RacePage({ params }: { params: Promise<{ id: strin
     include: { race: { select: { name: true } } },
   });
 
-  // Athlete pool: use race results if completed, otherwise build from DB results
-  // across all completed same-gender races. Falls back to FIS fetch only when
-  // the DB has no results at all (cold start before any sync).
+  // Athlete pool: use race results if completed (sorted by rank), otherwise
+  // use WC standings stored in DB (synced after each race). Falls back to a
+  // live FIS fetch only on cold start before any standings have been synced.
   let athletePool: { id: string; name: string; nationCode: string }[] = [];
 
   if (race.results.length > 0) {
@@ -69,25 +69,13 @@ export default async function RacePage({ params }: { params: Promise<{ id: strin
       nationCode: r.athlete.nationCode,
     }));
   } else {
-    const allResults = await prisma.result.findMany({
-      where: { race: { gender: race.gender, status: "completed" } },
-      include: { athlete: true },
+    const athletes = await prisma.athlete.findMany({
+      where: { gender: race.gender },
+      orderBy: [{ wcPoints: "desc" }, { name: "asc" }],
     });
-
-    if (allResults.length > 0) {
-      const points = new Map<string, number>();
-      const athleteMap = new Map<string, { name: string; nationCode: string }>();
-      for (const r of allResults) {
-        athleteMap.set(r.athlete.id, { name: r.athlete.name, nationCode: r.athlete.nationCode });
-        points.set(r.athlete.id, (points.get(r.athlete.id) ?? 0) + wcPoints(r.rank));
-      }
-      athletePool = Array.from(athleteMap.entries())
-        .map(([id, { name, nationCode }]) => ({ id, name, nationCode, pts: points.get(id) ?? 0 }))
-        .sort((a, b) => b.pts - a.pts || a.name.localeCompare(b.name))
-        .map(({ id, name, nationCode }) => ({ id, name, nationCode }));
-    } else {
-      athletePool = await fetchAthletePool(race.gender, currentSeasonCode());
-    }
+    athletePool = athletes.length > 0
+      ? athletes
+      : await fetchAthletePool(race.gender, currentSeasonCode());
   }
 
   const podium =
