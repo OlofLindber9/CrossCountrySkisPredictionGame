@@ -34,6 +34,7 @@ export interface FisEventRace {
   discipline: string;
   technique: string;
   gender: "M" | "W";
+  date?: Date; // individual race date when parseable from the event detail page
 }
 
 export interface FisResult {
@@ -74,7 +75,8 @@ export async function fetchCalendar(seasonCode: string): Promise<FisRace[]> {
  */
 export async function fetchEventRaces(
   eventId: string,
-  seasonCode: string
+  seasonCode: string,
+  eventStartDate?: Date
 ): Promise<FisEventRace[]> {
   const url =
     `https://www.fis-ski.com/DB/general/event-details.html` +
@@ -87,7 +89,7 @@ export async function fetchEventRaces(
 
   if (!res.ok) return [];
   const html = await res.text();
-  return parseEventRaces(html);
+  return parseEventRaces(html, eventStartDate);
 }
 
 /** Fetch results for a race by its FIS race ID */
@@ -121,7 +123,7 @@ export async function fetchResults(raceId: string): Promise<FisResult[]> {
  *
  * Qualification, relay, and team-sprint rows are excluded.
  */
-function parseEventRaces(html: string): FisEventRace[] {
+function parseEventRaces(html: string, eventStartDate?: Date): FisEventRace[] {
   const $ = cheerio.load(html);
   const races: FisEventRace[] = [];
 
@@ -140,7 +142,8 @@ function parseEventRaces(html: string): FisEventRace[] {
     const rowText = $row.text();
 
     // Exclude qualification, relay, and team-sprint races
-    if (/qualif/i.test(rowText)) return;
+    // "qualif" catches "Qualification"/"Qualifier"; "qual" catches FIS abbreviation "Qual"; "SPQ" is the FIS codex abbreviation
+    if (/qualif|\bqual\b|\bspq\b/i.test(rowText)) return;
     if (/relay/i.test(rowText)) return;
     if (/team\s*sprint/i.test(rowText)) return;
 
@@ -153,10 +156,53 @@ function parseEventRaces(html: string): FisEventRace[] {
     const technique = extractTechnique(rowText, discipline);
     const gender: "M" | "W" = isW ? "W" : "M";
 
-    races.push({ fisRaceId, discipline, technique, gender });
+    // Try to extract the individual race date from this row (e.g. "01 MAR", "28 FEB")
+    const date = eventStartDate
+      ? parseRaceDateFromRowText(rowText, eventStartDate) ?? undefined
+      : undefined;
+
+    races.push({ fisRaceId, discipline, technique, gender, date });
   });
 
   return races;
+}
+
+/**
+ * Try to parse a specific race date from the row text on the event detail page.
+ * FIS rows contain dates like "01 MAR", "28 FEB", "1 March" etc.
+ * Returns null if no recognisable date is found.
+ */
+function parseRaceDateFromRowText(rowText: string, eventStart: Date): Date | null {
+  const MONTHS: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+  };
+
+  const m = rowText.match(
+    /\b(\d{1,2})\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b/i
+  );
+  if (!m) return null;
+
+  const day = parseInt(m[1]);
+  const monthKey = m[2].toLowerCase().substring(0, 3) as keyof typeof MONTHS;
+  const month = MONTHS[monthKey];
+  if (month === undefined || day < 1 || day > 31) return null;
+
+  // Use the same year as the event start. Allow the race to fall up to 10 days
+  // after the event start date (a long event weekend). If the result is wildly
+  // off, try adjusting the year (handles rare Dec→Jan crossover events).
+  const eventYear = eventStart.getFullYear();
+  const candidate = new Date(eventYear, month, day);
+  const diffDays = (candidate.getTime() - eventStart.getTime()) / 86400000;
+
+  if (diffDays >= -1 && diffDays <= 10) return candidate;
+
+  // Try next year (Dec event, Jan race)
+  const nextYear = new Date(eventYear + 1, month, day);
+  const diffNext = (nextYear.getTime() - eventStart.getTime()) / 86400000;
+  if (diffNext >= -1 && diffNext <= 10) return nextYear;
+
+  return null;
 }
 
 function parseCalendar(html: string, seasonCode: string): FisRace[] {
@@ -449,10 +495,11 @@ export async function fetchAthletePool(
 /**
  * Build a human-readable race name from its components.
  * Examples:
- *   "Women Sprint Classic - Ruka"
- *   "Men 10km Free - Davos"
- *   "Women Skiathlon - Toblach"
- *   "Men Pursuit Free - Oslo"
+ *   "Women Sprint Final Free - Ruka"
+ *   "Men Interval Start 10km Classic - Davos"
+ *   "Women Mass Start 20km Free - Oslo"
+ *   "Women Skiathlon 7.5+7.5km - Toblach"
+ *   "Men Pursuit 10km Free - Toblach"
  */
 export function buildRaceName(
   gender: "M" | "W",
@@ -467,26 +514,53 @@ export function buildRaceName(
 }
 
 /**
- * Extract discipline from an event detail page row's text content.
- * FIS uses names like "Sprint Classic", "10km Free", "Skiathlon 7.5+7.5km",
- * "Pursuit 10km", "Mass Start 30km".
+ * Extract the full race type + distance from an event detail page row.
+ * Returns values like "Sprint Final", "Interval Start 10km", "Mass Start 20km",
+ * "Skiathlon 7.5+7.5km", "Pursuit 10km".
+ *
+ * Qualifications are filtered before this function is called, so any remaining
+ * sprint row is a final.
  */
 function extractDisciplineFromRow(text: string): string {
   const t = text.toLowerCase();
-  if (t.includes("sprint")) return "Sprint";
-  if (t.includes("skiathlon") || t.includes("skiatlon")) return "Skiathlon";
-  if (t.includes("pursuit")) return "Pursuit";
-  if (t.includes("mass start") || t.includes("massstart")) return "Mass Start";
 
-  // Distance race — try to extract the km value (e.g. "10km", "7.5 km", "15 km")
-  const distMatch = text.match(/(\d+(?:[.,]\d+)?)\s*km/i);
-  if (distMatch) {
-    // Normalise "7,5" → "7.5"
-    const km = distMatch[1].replace(",", ".");
-    return `${km}km`;
+  // Sprint — qualifications are already excluded; remaining sprints are finals
+  if (t.includes("sprint")) {
+    return t.includes("final") ? "Sprint Final" : "Sprint";
   }
 
-  return "Distance";
+  // Skiathlon — distance expressed as two legs, e.g. "7.5 + 7.5km" or "7.5km + 7.5km"
+  if (t.includes("skiathlon") || t.includes("skiatlon")) {
+    // Handles: "7.5 + 7.5km", "7.5km + 7.5km", "7.5 km + 7.5 km"
+    const doubleMatch = text.match(/(\d+(?:[.,]\d+)?)\s*km?\s*\+\s*(\d+(?:[.,]\d+)?)\s*km/i);
+    if (doubleMatch) {
+      const d1 = doubleMatch[1].replace(",", ".");
+      const d2 = doubleMatch[2].replace(",", ".");
+      return `Skiathlon ${d1}+${d2}km`;
+    }
+    const singleMatch = text.match(/(\d+(?:[.,]\d+)?)\s*km/i);
+    if (singleMatch) return `Skiathlon ${singleMatch[1].replace(",", ".")}km`;
+    return "Skiathlon";
+  }
+
+  // Pursuit
+  if (t.includes("pursuit")) {
+    const m = text.match(/(\d+(?:[.,]\d+)?)\s*km/i);
+    const dist = m ? ` ${m[1].replace(",", ".")}km` : "";
+    return `Pursuit${dist}`;
+  }
+
+  // Mass Start
+  if (t.includes("mass start") || t.includes("massstart")) {
+    const m = text.match(/(\d+(?:[.,]\d+)?)\s*km/i);
+    const dist = m ? ` ${m[1].replace(",", ".")}km` : "";
+    return `Mass Start${dist}`;
+  }
+
+  // Default: Interval Start (the standard WC distance format)
+  const m = text.match(/(\d+(?:[.,]\d+)?)\s*km/i);
+  const dist = m ? ` ${m[1].replace(",", ".")}km` : "";
+  return `Interval Start${dist}`;
 }
 
 /**

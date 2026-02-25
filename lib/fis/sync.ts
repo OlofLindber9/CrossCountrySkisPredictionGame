@@ -5,6 +5,7 @@ import {
   fetchResults,
   fetchWcStandings,
   buildRaceName,
+  type FisEventRace,
 } from "./fetcher";
 import { calculateScore, getPodiumFromResults } from "@/lib/scoring";
 
@@ -49,9 +50,9 @@ export async function syncCalendar(): Promise<number> {
   for (const eventId of uniqueEventIds) {
     const meta = eventMeta.get(eventId)!;
 
-    let races;
+    let races: FisEventRace[];
     try {
-      races = await fetchEventRaces(eventId, seasonCode);
+      races = await fetchEventRaces(eventId, seasonCode, meta.date);
     } catch {
       races = [];
     }
@@ -59,6 +60,7 @@ export async function syncCalendar(): Promise<number> {
     for (const race of races) {
       const raceId = `fis-${race.fisRaceId}`;
       const name = buildRaceName(race.gender, race.discipline, race.technique, meta.venue);
+      const raceDate = race.date ?? meta.date;
 
       await prisma.race.upsert({
         where: { id: raceId },
@@ -66,7 +68,7 @@ export async function syncCalendar(): Promise<number> {
           name,
           venue: meta.venue,
           country: meta.country,
-          date: meta.date,
+          date: raceDate,
           discipline: race.discipline,
           technique: race.technique,
           gender: race.gender,
@@ -78,7 +80,7 @@ export async function syncCalendar(): Promise<number> {
           name,
           venue: meta.venue,
           country: meta.country,
-          date: meta.date,
+          date: raceDate,
           discipline: race.discipline,
           technique: race.technique,
           gender: race.gender,

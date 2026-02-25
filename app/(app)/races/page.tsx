@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { syncCalendar, syncCompletedRaces } from "@/lib/fis/sync";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
-import { format, disciplineColor, techniqueColor, genderLabel, genderColor } from "@/lib/utils";
+import { format, genderLabel, genderColor, distanceLabel, techniqueLabel } from "@/lib/utils";
 
 async function refreshCalendarAction() {
   "use server";
@@ -124,18 +124,12 @@ function RaceCard({
       className={`glass-card hover:border-white/30 hover:shadow-xl transition-all flex items-center justify-between gap-4 overflow-hidden ${isPast && !isCompleted ? "opacity-50" : ""}`}
     >
       <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap items-center gap-1.5 mb-1">
-          <span className={`badge ${disciplineColor(race.discipline)}`}>
-            {race.discipline}
-          </span>
-          {race.technique && race.technique !== "Skiathlon" && (
-            <span className={`badge ${techniqueColor(race.technique)}`}>{race.technique}</span>
-          )}
-          <span className={`badge ${genderColor(race.gender)}`}>
-            {genderLabel(race.gender)}
-          </span>
-          {isCompleted && <span className="badge badge-green">Completed</span>}
-          {!isCompleted && isPast && <span className="badge badge-gray">Past</span>}
+        {/* 3 fixed-width badges — each starts at its own tab stop */}
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="badge badge-blue w-20 justify-center">{distanceLabel(race.discipline)}</span>
+          <span className="badge badge-gray w-[6.5rem] justify-center">{techniqueLabel(race.technique)}</span>
+          <span className={`badge ${genderColor(race.gender)} w-16 justify-center`}>{genderLabel(race.gender)}</span>
+          {isCompleted && <span className="badge badge-green">Done</span>}
         </div>
         <div className="font-semibold text-white truncate">{race.name}</div>
         <div className="text-sm text-white/40 mt-0.5 truncate">
